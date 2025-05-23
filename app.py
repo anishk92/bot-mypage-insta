@@ -68,7 +68,7 @@ def webhook():
                 if change.get("field") == "comments":
                     comment_info = change.get("value", {})
                     commenter_id = comment_info.get("from", {}).get("id")
-                    media_id = comment_info.get("media_id")  # 👈 Media ID instead of shortcode
+                    media_id = comment_info.get("media", {}).get("id")   # 👈 Media ID instead of shortcode
                     print(f"💬 Commenter ID: {commenter_id}, Media ID: {media_id}")
                     sys.stdout.flush()
 
