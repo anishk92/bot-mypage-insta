@@ -5,6 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
 import base64
+import sys
 
 load_dotenv()
 
@@ -33,26 +34,45 @@ def get_blog_url(shortcode):
 def home():
     return "Instagram Comment to Blog URL DM Bot is running."
 
+@app.route("/test-log")
+def test_log():
+    print("Test log endpoint hit!")
+    sys.stdout.flush()
+    return "Check your logs for the test message."
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
+        print("Webhook GET verification received")
+        sys.stdout.flush()
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge"), 200
         return "Verification token mismatch", 403
 
     if request.method == "POST":
         data = request.get_json()
-        print("Webhook data received:", data)
+        print("Webhook POST data received:", data)
+        sys.stdout.flush()
+
+        if not data:
+            print("No JSON data in webhook POST")
+            sys.stdout.flush()
+            return "No data", 400
+
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
                 if change.get("field") == "comments":
                     comment_info = change.get("value", {})
                     commenter_id = comment_info.get("from", {}).get("id")
                     post_shortcode = comment_info.get("media_shortcode")
+                    print(f"Commenter ID: {commenter_id}, Post Shortcode: {post_shortcode}")
+                    sys.stdout.flush()
+
                     if commenter_id and post_shortcode:
                         blog_url = get_blog_url(post_shortcode)
                         message = f"Thanks for commenting! Here's the blog post link: {blog_url}"
                         send_dm(commenter_id, message)
+
         return "ok", 200
 
 def send_dm(recipient_id, message):
@@ -63,9 +83,8 @@ def send_dm(recipient_id, message):
     }
     response = requests.post(url, json=payload)
     print("DM response:", response.status_code, response.text)
+    sys.stdout.flush()
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
-
