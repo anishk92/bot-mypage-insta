@@ -9,7 +9,7 @@ import sys
 
 load_dotenv()
 
-# Decode Google credentials
+# Decode Google credentials from base64 env variable if present
 if os.getenv("GOOGLE_CREDENTIALS_B64"):
     with open("google-credentials.json", "wb") as f:
         f.write(base64.b64decode(os.getenv("GOOGLE_CREDENTIALS_B64")))
@@ -37,6 +37,7 @@ def home():
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
+        # Instagram webhook verification
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge"), 200
         return "Verification token mismatch", 403
@@ -45,6 +46,8 @@ def webhook():
         data = request.get_json()
         print("📥 Webhook POST data received:", data)
         sys.stdout.flush()
+
+        BOT_USER_ID = '17841402066520501'  # Replace with your Instagram Bot User ID
 
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
@@ -59,6 +62,11 @@ def webhook():
                     print(f"💬 Commenter ID: {commenter_id}, Media ID: {media_id}")
                     sys.stdout.flush()
 
+                    # Skip replying to own comments to avoid infinite loops
+                    if commenter_id == BOT_USER_ID:
+                        print("Skipping comment from self to avoid loop.")
+                        continue
+
                     if commenter_id and comment_id:
                         reply_text = "Thanks for your comment! DM me to get the blog link. 😊"
                         send_comment_reply(comment_id, reply_text)
@@ -70,8 +78,7 @@ def webhook():
                     print(f"📨 DM from {sender_id}: {message_text}")
                     sys.stdout.flush()
 
-                    # You can implement logic to detect media ID in the message or default
-                    # For now, we'll just send a default link or first media ID match
+                    # Reply with blog link (using first media ID found)
                     if media_to_blog_url:
                         first_media_id = list(media_to_blog_url.keys())[0]
                         blog_url = media_to_blog_url[first_media_id]
