@@ -9,7 +9,7 @@ import sys
 
 load_dotenv()
 
-# Decode Google service credentials
+# Decode Google credentials
 if os.getenv("GOOGLE_CREDENTIALS_B64"):
     with open("google-credentials.json", "wb") as f:
         f.write(base64.b64decode(os.getenv("GOOGLE_CREDENTIALS_B64")))
@@ -25,14 +25,14 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.jso
 client = gspread.authorize(creds)
 sheet = client.open("blogurl").sheet1
 records = sheet.get_all_records()
-mediaid_to_blog_url = {str(record['Instagram Mediaid']): record['Blog URL'] for record in records}
+media_to_blog_url = {str(record['Instagram Mediaid']): record['Blog URL'] for record in records}
 
 def get_blog_url(media_id):
-    return mediaid_to_blog_url.get(str(media_id), "https://techboltx.com")
+    return media_to_blog_url.get(str(media_id), "https://techboltx.com")
 
 @app.route("/", methods=["GET"])
 def home():
-    return "Instagram Comment to Blog URL DM Bot is running."
+    return "Instagram Comment Auto-Reply Bot is running."
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
@@ -48,29 +48,58 @@ def webhook():
 
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
-                if change.get("field") == "comments":
-                    value = change.get("value", {})
+                field = change.get("field")
+                value = change.get("value", {})
+
+                if field == "comments":
                     commenter_id = value.get("from", {}).get("id")
+                    comment_id = value.get("id")
                     media_id = value.get("media", {}).get("id")
 
                     print(f"💬 Commenter ID: {commenter_id}, Media ID: {media_id}")
                     sys.stdout.flush()
 
-                    if commenter_id and media_id:
-                        blog_url = get_blog_url(media_id)
-                        message = f"Thanks for commenting! Here’s the blog post: {blog_url}"
-                        send_dm(commenter_id, message)
+                    if commenter_id and comment_id:
+                        reply_text = "Thanks for your comment! DM me to get the blog link. 😊"
+                        send_comment_reply(comment_id, reply_text)
+
+                elif field == "messages":
+                    sender_id = value.get("sender", {}).get("id")
+                    message_text = value.get("message", {}).get("text", "")
+
+                    print(f"📨 DM from {sender_id}: {message_text}")
+                    sys.stdout.flush()
+
+                    # You can implement logic to detect media ID in the message or default
+                    # For now, we'll just send a default link or first media ID match
+                    if media_to_blog_url:
+                        first_media_id = list(media_to_blog_url.keys())[0]
+                        blog_url = media_to_blog_url[first_media_id]
+                        reply = f"Thanks for messaging! Here's your blog link: {blog_url}"
+                        send_dm(sender_id, reply)
 
         return "ok", 200
 
 def send_dm(recipient_id, message):
-    url = f"https://graph.facebook.com/v19.0/me/messages?access_token={ACCESS_TOKEN}"
+    url = f"https://graph.facebook.com/v19.0/{recipient_id}/messages"
     payload = {
+        "messaging_type": "RESPONSE",
         "recipient": {"id": recipient_id},
-        "message": {"text": message}
+        "message": {"text": message},
+        "access_token": ACCESS_TOKEN
     }
     response = requests.post(url, json=payload)
-    print(f"📤 DM response: {response.status_code} {response.text}")
+    print("📤 DM response:", response.status_code, response.text)
+    sys.stdout.flush()
+
+def send_comment_reply(comment_id, text):
+    url = f"https://graph.facebook.com/v19.0/{comment_id}/replies"
+    payload = {
+        "message": text,
+        "access_token": ACCESS_TOKEN
+    }
+    response = requests.post(url, data=payload)
+    print("💬 Comment reply response:", response.status_code, response.text)
     sys.stdout.flush()
 
 if __name__ == "__main__":
