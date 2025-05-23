@@ -7,15 +7,13 @@ from dotenv import load_dotenv
 import base64
 import sys
 
-# Load environment variables
 load_dotenv()
 
-# Decode Google credentials if base64 env variable is present
+# Decode Google service credentials
 if os.getenv("GOOGLE_CREDENTIALS_B64"):
     with open("google-credentials.json", "wb") as f:
         f.write(base64.b64decode(os.getenv("GOOGLE_CREDENTIALS_B64")))
 
-# Initialize Flask app
 app = Flask(__name__)
 
 ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN")
@@ -27,28 +25,18 @@ creds = ServiceAccountCredentials.from_json_keyfile_name('google-credentials.jso
 client = gspread.authorize(creds)
 sheet = client.open("blogurl").sheet1
 records = sheet.get_all_records()
-
-# Create a lookup dictionary from the sheet using Media ID
-post_to_blog_url = {str(record['Instagram Mediaid']): record['Blog URL'] for record in records}
+mediaid_to_blog_url = {str(record['Instagram Mediaid']): record['Blog URL'] for record in records}
 
 def get_blog_url(media_id):
-    return post_to_blog_url.get(str(media_id), "https://techboltx.com")
+    return mediaid_to_blog_url.get(str(media_id), "https://techboltx.com")
 
 @app.route("/", methods=["GET"])
 def home():
-    return "✅ Instagram Comment to Blog URL DM Bot is running."
-
-@app.route("/test-log")
-def test_log():
-    print("✅ Test log endpoint hit!")
-    sys.stdout.flush()
-    return "Check your logs for the test message."
+    return "Instagram Comment to Blog URL DM Bot is running."
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        print("🔍 Webhook GET verification received")
-        sys.stdout.flush()
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge"), 200
         return "Verification token mismatch", 403
@@ -58,23 +46,19 @@ def webhook():
         print("📥 Webhook POST data received:", data)
         sys.stdout.flush()
 
-        if not data:
-            print("⚠️ No JSON data in webhook POST")
-            sys.stdout.flush()
-            return "No data", 400
-
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
                 if change.get("field") == "comments":
-                    comment_info = change.get("value", {})
-                    commenter_id = comment_info.get("from", {}).get("id")
-                    media_id = comment_info.get("media", {}).get("id")   # 👈 Media ID instead of shortcode
+                    value = change.get("value", {})
+                    commenter_id = value.get("from", {}).get("id")
+                    media_id = value.get("media", {}).get("id")
+
                     print(f"💬 Commenter ID: {commenter_id}, Media ID: {media_id}")
                     sys.stdout.flush()
 
                     if commenter_id and media_id:
                         blog_url = get_blog_url(media_id)
-                        message = f"Thanks for commenting! Here's the blog post link: {blog_url}"
+                        message = f"Thanks for commenting! Here’s the blog post: {blog_url}"
                         send_dm(commenter_id, message)
 
         return "ok", 200
@@ -86,7 +70,7 @@ def send_dm(recipient_id, message):
         "message": {"text": message}
     }
     response = requests.post(url, json=payload)
-    print("📤 DM response:", response.status_code, response.text)
+    print(f"📤 DM response: {response.status_code} {response.text}")
     sys.stdout.flush()
 
 if __name__ == "__main__":
