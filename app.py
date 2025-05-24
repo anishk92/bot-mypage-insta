@@ -37,7 +37,6 @@ def home():
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        # Instagram webhook verification
         if request.args.get("hub.verify_token") == VERIFY_TOKEN:
             return request.args.get("hub.challenge"), 200
         return "Verification token mismatch", 403
@@ -47,9 +46,10 @@ def webhook():
         print("📥 Webhook POST data received:", data)
         sys.stdout.flush()
 
-        BOT_USER_ID = '17841402066520501'  # Replace with your Instagram Bot User ID
+        BOT_USER_ID = '17841402066520501'  # Your bot's Instagram ID
 
         for entry in data.get("entry", []):
+            # Handle comments via 'changes'
             for change in entry.get("changes", []):
                 field = change.get("field")
                 value = change.get("value", {})
@@ -62,7 +62,6 @@ def webhook():
                     print(f"💬 Commenter ID: {commenter_id}, Media ID: {media_id}")
                     sys.stdout.flush()
 
-                    # Skip replying to own comments to avoid infinite loops
                     if commenter_id == BOT_USER_ID:
                         print("Skipping comment from self to avoid loop.")
                         continue
@@ -71,14 +70,16 @@ def webhook():
                         reply_text = "Thanks for your comment! DM me to get the blog link. 😊"
                         send_comment_reply(comment_id, reply_text)
 
-                elif field == "messages":
-                    sender_id = value.get("sender", {}).get("id")
-                    message_text = value.get("message", {}).get("text", "")
+            # Handle direct messages via 'messaging'
+            for message_event in entry.get("messaging", []):
+                sender_id = message_event.get("sender", {}).get("id")
+                message_text = message_event.get("message", {}).get("text", "")
 
-                    print(f"📨 DM from {sender_id}: {message_text}")
-                    sys.stdout.flush()
+                print(f"📨 DM from {sender_id}: {message_text}")
+                sys.stdout.flush()
 
-                    # Reply with blog link (using first media ID found)
+                if sender_id and message_text:
+                    # Respond with first blog link or default
                     if media_to_blog_url:
                         first_media_id = list(media_to_blog_url.keys())[0]
                         blog_url = media_to_blog_url[first_media_id]
@@ -86,6 +87,7 @@ def webhook():
                         send_dm(sender_id, reply)
 
         return "ok", 200
+
 
 def send_dm(recipient_id, message):
     url = f"https://graph.facebook.com/v19.0/{recipient_id}/messages"
