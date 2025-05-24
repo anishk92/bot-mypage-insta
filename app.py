@@ -20,7 +20,7 @@ app = Flask(__name__)
 
 ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
-BOT_USER_ID = os.getenv("IG_BOT_USER_ID", "")  # Set this in your .env if not hardcoded
+BOT_USER_ID = os.getenv("IG_BOT_USER_ID", "")  # Set in your .env
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -50,7 +50,7 @@ def webhook():
         sys.stdout.flush()
 
         for entry in data.get("entry", []):
-            # 🔁 Handle comment replies from IG Graph API
+            # 🔁 Handle comment replies
             for change in entry.get("changes", []):
                 field = change.get("field")
                 value = change.get("value", {})
@@ -70,7 +70,7 @@ def webhook():
                     reply_text = "Thanks for your comment! DM me to get the blog link. 😊"
                     send_comment_reply(comment_id, reply_text)
 
-            # 💬 Handle DMs via Messenger webhook format
+            # 💬 Handle DMs
             for message_event in entry.get("messaging", []):
                 sender_id = message_event.get("sender", {}).get("id")
                 message_text = message_event.get("message", {}).get("text", "")
@@ -79,7 +79,6 @@ def webhook():
                 sys.stdout.flush()
 
                 if sender_id and message_text:
-                    # Always send the first blog link for now
                     if media_to_blog_url:
                         first_media_id = list(media_to_blog_url.keys())[0]
                         blog_url = media_to_blog_url[first_media_id]
@@ -91,6 +90,7 @@ def webhook():
 
         return "ok", 200
 
+# ✅ GLOBAL function for sending DMs (correct endpoint)
 def send_dm(recipient_id, message):
     url = f"https://graph.facebook.com/v19.0/me/messages?access_token={ACCESS_TOKEN}"
     payload = {
@@ -102,6 +102,7 @@ def send_dm(recipient_id, message):
     print("📤 DM response:", response.status_code, response.text)
     sys.stdout.flush()
 
+# ✅ Reply to a comment on Instagram
 def send_comment_reply(comment_id, text):
     url = f"https://graph.facebook.com/v19.0/{comment_id}/replies"
     payload = {
@@ -112,6 +113,7 @@ def send_comment_reply(comment_id, text):
     print("💬 Comment reply response:", response.status_code, response.text)
     sys.stdout.flush()
 
+# ✅ Start Flask app
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
